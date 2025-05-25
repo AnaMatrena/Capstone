@@ -30,7 +30,7 @@ DB.create_tables([PricePrediction], safe=True)
 # Flask App Setup
 app = Flask(__name__)
 
-@app.route('/forecast_prices', methods=['POST'])
+@app.route('/forecast_prices/', methods=['POST'])
 def forecast_prices():
     try:
         request_data = request.get_json()
@@ -79,7 +79,7 @@ def forecast_prices():
 
     return Response(json.dumps(response_data, indent=4) + "\n", status=200, mimetype="application/json")
 
-@app.route('/actual_prices', methods=['POST'])
+@app.route('/actual_prices/', methods=['POST'])
 def actual_prices():
     request_data = request.get_json()
     sku = request_data.get("sku")
