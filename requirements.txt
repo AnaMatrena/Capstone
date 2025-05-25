@@ -1,0 +1,5 @@
+flask
+peewee
+pandas
+joblib
+jsonpickle
