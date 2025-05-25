@@ -55,7 +55,7 @@ def forecast_prices():
         return jsonify({"error 422": "SKU must be a 4-digit string, containing only digits"}), 422
     
     # Validate time_key lengh
-    if not isinstance(time_key, int) or not len(sku) != 8:
+    if not isinstance(time_key, int) or not len(time_key) != 8:
         return jsonify({"error 422": "time_key must be an integer in yyyymmdd format"}), 422
 
     #try:
