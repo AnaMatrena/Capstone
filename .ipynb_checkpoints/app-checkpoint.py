@@ -1,4 +1,4 @@
-#!pip install peewee
+!pip install peewee
 import os
 import peewee
 import json
