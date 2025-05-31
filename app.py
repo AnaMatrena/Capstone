@@ -1,5 +1,5 @@
-!pip install peewee
-import psycopg2
+#!pip install peewee
+#import psycopg2
 import os
 import peewee
 import json
