@@ -1,4 +1,3 @@
-#!pip install peewee
 import os
 import peewee
 import json
@@ -129,8 +128,8 @@ def validate_data(sku, time_key):
         raise ValueError("SKU must be exactly 4 digits, nnnn string format with "" before and after, and only contain numbers.")
     try:
         date = pd.to_datetime(str(time_key), format='%Y%m%d')
-        if date <= pd.Timestamp('2025-01-01'):
-            raise ValueError("time_key must be a date after 2025-01-01.")
+        if date <= pd.Timestamp('2024-10-31'):
+            raise ValueError("time_key must be a date after 2024-10-31.")
     except ValueError:
         raise ValueError("time_key must be a valid date in YYYYMMDD format.")
 
