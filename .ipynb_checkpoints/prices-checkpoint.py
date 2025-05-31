@@ -4,16 +4,18 @@ import pickle
 import joblib
 import pandas as pd
 from flask import Flask, jsonify, request, Response
-from peewee import Model, IntegerField, FloatField, TextField, IntegrityError, SQL, CompositeKey
+from peewee import Model, IntegerField, FloatField, TextField, IntegrityError, SQL
 from playhouse.shortcuts import model_to_dict
 from playhouse.db_url import connect
 from collections import OrderedDict
+import re
+from datetime import datetime
 
 # Database Setup
 DB = connect(os.environ.get('DATABASE_URL') or 'sqlite:///prices.db')
 
-#port = int(os.getenv("PORT", 5000))  # Default to 5000 if PORT isn't set activar para o deploy
-#app.run(host="0.0.0.0", port=port) local não corre com app NameError: name 'app' is not defined
+#port = int(os.getenv("PORT", 5000))  # Default to 5000 if PORT isn't set
+#app.run(host="0.0.0.0", port=port)
 
 class PricePrediction(Model):
     sku = TextField()
@@ -25,16 +27,15 @@ class PricePrediction(Model):
 
     class Meta:
         database = DB
-        #constraints = [SQL("UNIQUE(sku, time_key)")]
-        #primary_key = False
-        primary_key = CompositeKey('sku', 'time_key')
+        constraints = [SQL("UNIQUE(sku, time_key)")]
+        primary_key = False
 
 DB.create_tables([PricePrediction], safe=True)
 
 # Flask App Setup
 app = Flask(__name__)
 
-@app.route('/forecast_prices/', methods=['POST'])
+@app.route('/forecast_prices', methods=['POST'])
 def forecast_prices():
     try:
         request_data = request.get_json()
@@ -45,18 +46,18 @@ def forecast_prices():
 
     # Ensure required fields are present
     if sku is None or time_key is None:
-        return jsonify({"error 422": "Required: column 1 'SKU' with string 'nnnn', and column 2 `time_key` with integer yyyymmdd"}), 422
+        return jsonify({"error 422": "Must insert `sku` and `time_key`"}), 422
     
     # Validate columns
-    if not sku or not time_key:
-        return jsonify({"error 422": "Required: column 1 'SKU' with string 'nnnn', and column 2 `time_key` with integer yyyymmdd"}), 422
+    if not sku or not isinstance(time_key, int):
+        return jsonify({"error 422": "Must insert 'SKU' and 'time_key'"}), 422
 
     # Validate SKU: Must be digits only and exactly 4 digits long
     if not isinstance(sku, str) or not sku.isdigit() or len(sku) != 4:
         return jsonify({"error 422": "SKU must be a 4-digit string, containing only digits"}), 422
     
     # Validate time_key lengh
-    if not isinstance(time_key, int) or len(time_key) != 8:
+    if not isinstance(time_key, int): #or not len(time_key) != 8:
         return jsonify({"error 422": "time_key must be an integer in yyyymmdd format"}), 422
 
     #try:
