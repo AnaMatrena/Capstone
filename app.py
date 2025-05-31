@@ -1,16 +1,13 @@
+!pip install peewee
 import os
 import json
 import pickle
 import joblib
 import pandas as pd
-from flask import Flask, jsonify, request
-from peewee import (
-    Model, IntegerField, FloatField,
-    TextField, IntegrityError
-)
+from flask import Flask, jsonify, request, abort
+from peewee import Model, IntegerField, FloatField, TextField, IntegrityError
 from playhouse.shortcuts import model_to_dict
 from playhouse.db_url import connect
-
 
 ########################################
 # Begin database stuff
@@ -20,94 +17,91 @@ from playhouse.db_url import connect
 # Otherwise, it connects to a local sqlite db stored in predictions.db.
 DB = connect(os.environ.get('DATABASE_URL') or 'sqlite:///predictions.db')
 
-class Prediction(Model):
-    observation_id = IntegerField(unique=True)
-    observation = TextField()
-    proba = FloatField()
-    true_class = IntegerField(null=True)
-
+class PriceForecast(Model):
+    sku = TextField()
+    time_key = IntegerField()
+    pvp_is_competitorA = FloatField()
+    pvp_is_competitorB = FloatField()
+    pvp_is_competitorA_actual = FloatField(null=True)
+    pvp_is_competitorB_actual = FloatField(null=True)
+    
     class Meta:
         database = DB
 
-
-DB.create_tables([Prediction], safe=True)
+DB.create_tables([PriceForecast], safe=True)
 
 # End database stuff
 ########################################
-
-########################################
-# Unpickle the previously-trained model
-
-
-with open('columns.json') as fh:
-    columns = json.load(fh)
-
-pipeline = joblib.load('pipeline.pickle')
-
-with open('dtypes.pickle', 'rb') as fh:
-    dtypes = pickle.load(fh)
-
-
-# End model un-pickling
-########################################
-
 
 ########################################
 # Begin webserver stuff
 
 app = Flask(__name__)
 
+@app.route('/forecast_prices/', methods=['POST'])
+def forecast_prices():
+    # Get data from the request
+    data = request.get_json()
+    sku = data.get('sku')
+    time_key = data.get('time_key')
+    
+    # Validate the data
+    validate_data(sku, time_key)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    # Flask provides a deserialization convenience function called
-    # get_json that will work if the mimetype is application/json.
-    obs_dict = request.get_json()
-    _id = obs_dict['id']
-    observation = obs_dict['observation']
-    # Now do what we already learned in the notebooks about how to transform
-    # a single observation into a dataframe that will work with a pipeline.
-    obs = pd.DataFrame([observation], columns=columns).astype(dtypes)
-    # Now get ourselves an actual prediction of the positive class.
-    proba = pipeline.predict_proba(obs)[0, 1]
-    response = {'proba': proba}
-    p = Prediction(
-        observation_id=_id,
-        proba=proba,
-        observation=request.data
+    # Mockup for predicted prices
+    pvp_is_competitorA = 10.0 + hash(sku) % 5  # Placeholder logic for predictions
+    pvp_is_competitorB = 15.0 + hash(sku) % 5
+    
+    # Create a new forecast and save it
+    forecast = PriceForecast(
+        sku=sku,
+        time_key=time_key,
+        pvp_is_competitorA=pvp_is_competitorA,
+        pvp_is_competitorB=pvp_is_competitorB
     )
     try:
-        p.save()
+        forecast.save()
+        return jsonify(model_to_dict(forecast))
     except IntegrityError:
-        error_msg = f'Observation ID {_id} already exists'
-        response['error'] = error_msg
-        print(error_msg)
-        DB.rollback()
-    return jsonify(response)
+        return jsonify({'error': 'Forecast with the same SKU and time_key already exists.'}), 422
 
+@app.route('/actual_prices/', methods=['POST'])
+def actual_prices():
+    # Get data from the request
+    data = request.get_json()
+    sku = data.get('sku')
+    time_key = data.get('time_key')
+    pvp_is_competitorA_actual = data.get('pvp_is_competitorA_actual')
+    pvp_is_competitorB_actual = data.get('pvp_is_competitorB_actual')
 
-@app.route('/update', methods=['POST'])
-def update():
-    obs = request.get_json()
+    # Validate the data
+    validate_data(sku, time_key)
+
     try:
-        p = Prediction.get(Prediction.observation_id == obs['id'])
-        p.true_class = obs['true_class']
-        p.save()
-        return jsonify(model_to_dict(p))
-    except Prediction.DoesNotExist:
-        error_msg = f'Observation ID {obs['id']} does not exist'
-        return jsonify({'error': error_msg})
+        forecast = PriceForecast.get(PriceForecast.sku == sku, PriceForecast.time_key == time_key)
+        forecast.pvp_is_competitorA_actual = pvp_is_competitorA_actual
+        forecast.pvp_is_competitorB_actual = pvp_is_competitorB_actual
+        forecast.save()
+        return jsonify(model_to_dict(forecast))
+    except PriceForecast.DoesNotExist:
+        return jsonify({'error': 'Forecast with the specified SKU and time_key does not exist.'}), 422
 
+# Validation function to check if SKU and time_key meet the required conditions
+def validate_data(sku, time_key):
+    # Check if SKU is numeric and 4 digits
+    if not sku.isdigit() or len(sku) != 4:
+        abort(422, "SKU must be exactly 4 digits and only contain numbers.")
+        
+    # Check if time_key represents a valid date after 2025-01-01
+    try:
+        date = pd.to_datetime(str(time_key), format='%Y%m%d')
+        if date <= pd.Timestamp('2025-01-01'):
+            abort(422, "time_key must be a date after 2025-01-01.")
+    except ValueError:
+        abort(422, "time_key must be a valid date in YYYYMMDD format.")
 
-@app.route('/list-db-contents')
-def list_db_contents():
-    return jsonify([
-        model_to_dict(obs) for obs in Prediction.select()
-    ])
-
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', debug=True, port=5000)
 
 # End webserver stuff
-########################################
-
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', debug=True, port=5000)
+######################################## 
